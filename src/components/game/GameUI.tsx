@@ -38,6 +38,38 @@ export default function GameUI({ engine, tracker, poseStatus, onEnableCamera, on
     const [swingToast, setSwingToast] = useState<string | null>(null);
     const toastTimer = useRef<number | null>(null);
 
+    // Camera preview visibility (tracking continues when hidden).
+    const [showPreview, setShowPreview] = useState(true);
+    // Light Controls (the original lil-gui panel) — HIDDEN by default.
+    const [showLights, setShowLights] = useState(false);
+    const lilGuiRef = useRef<HTMLElement | null>(null);
+
+    // Locate the original lil-gui panel (created by MyGuiInterface after the scene
+    // loads) and hide it by default. We only toggle its CSS display — the panel and
+    // all its light controls stay fully functional.
+    useEffect(() => {
+        if (!engine) return;
+        let tries = 0;
+        let raf = 0;
+        const find = () => {
+            const el = (document.querySelector('.lil-gui.root') || document.querySelector('.lil-gui')) as HTMLElement | null;
+            if (el) {
+                lilGuiRef.current = el;
+                el.style.display = showLights ? '' : 'none';
+                return;
+            }
+            if (tries++ < 240) raf = requestAnimationFrame(find);
+        };
+        raf = requestAnimationFrame(find);
+        return () => cancelAnimationFrame(raf);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [engine]);
+
+    // Reflect the toggle onto the lil-gui panel's visibility.
+    useEffect(() => {
+        if (lilGuiRef.current) lilGuiRef.current.style.display = showLights ? '' : 'none';
+    }, [showLights]);
+
     // Subscribe to score + swing events once the engine exists.
     useEffect(() => {
         if (!engine) return;
@@ -112,7 +144,26 @@ export default function GameUI({ engine, tracker, poseStatus, onEnableCamera, on
             )}
 
             {/* Webcam preview (always mounted so the <video> exists for the tracker) */}
-            <CameraPreview tracker={tracker} status={poseStatus} onVideoReady={onVideoReady} />
+            <CameraPreview tracker={tracker} status={poseStatus} onVideoReady={onVideoReady} visible={showPreview} />
+
+            {/* Hide/Show camera toggle — small, above the preview. Tracking is unaffected. */}
+            {cameraActive && (
+                <button
+                    onClick={() => setShowPreview((v) => !v)}
+                    style={{ ...smallBtn, position: 'absolute', right: 12, bottom: showPreview ? 190 : 12, zIndex: 1250 }}
+                >
+                    {showPreview ? 'Hide Camera' : 'Show Camera'}
+                </button>
+            )}
+
+            {/* Light Controls toggle — opens/closes the original lil-gui panel. */}
+            <button
+                onClick={() => setShowLights((v) => !v)}
+                style={{ ...smallBtn, position: 'absolute', top: 12, right: 12, zIndex: 1250 }}
+                title="Toggle the scene light controls"
+            >
+                {showLights ? '✕ Lights' : '⚙ Lights'}
+            </button>
 
             {/* MENU */}
             {phase === 'menu' && (

@@ -81,7 +81,11 @@ export class GameEngine {
         this.app = app;
         this.useGameCamera = useGameCamera;
 
-        this.playerController = new PlayerController({ side: 'player' });
+        // invertLateral: the broadcast camera views the +X half from +X looking toward
+        // -X, so screen-right corresponds to world -Z. The de-mirrored pose maps the
+        // player's physical right to +Z, so we flip the lateral axis here (at the
+        // pose→movement mapping layer) to make physical-right = on-screen-right.
+        this.playerController = new PlayerController({ side: 'player', invertLateral: true });
         this.player = new PlayerCharacter('player', 0x2b6cff);
         this.scene.add(this.player.root);
 

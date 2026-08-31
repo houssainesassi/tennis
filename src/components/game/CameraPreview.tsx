@@ -9,6 +9,11 @@ interface CameraPreviewProps {
     status: PoseTrackerStatus;
     /** Registers the <video> element with the parent so it can start the tracker. */
     onVideoReady: (video: HTMLVideoElement) => void;
+    /**
+     * Whether the preview box is visually shown. When false the box is hidden but
+     * the <video> stays mounted and decoding, so MediaPipe keeps tracking. Defaults true.
+     */
+    visible?: boolean;
 }
 
 const STATUS_LABEL: Record<PoseTrackerStatus, string> = {
@@ -49,7 +54,7 @@ const BONES: Array<[keyof BodyPose, keyof BodyPose]> = [
     ['rightKnee', 'rightAnkle'],
 ];
 
-export default function CameraPreview({ tracker, status, onVideoReady }: CameraPreviewProps) {
+export default function CameraPreview({ tracker, status, onVideoReady, visible = true }: CameraPreviewProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -110,6 +115,10 @@ export default function CameraPreview({ tracker, status, onVideoReady }: CameraP
                 border: '1px solid rgba(255,255,255,0.15)',
                 zIndex: 1200,
                 fontFamily: 'system-ui, sans-serif',
+                // Hidden state: keep the <video> mounted + decoding (MediaPipe keeps
+                // working) but make the box invisible and non-interactive.
+                opacity: visible ? 1 : 0,
+                pointerEvents: visible ? 'auto' : 'none',
             }}
         >
             <div style={{ position: 'relative', width: 220, height: 165, background: '#111' }}>
