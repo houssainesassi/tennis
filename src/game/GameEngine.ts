@@ -54,6 +54,7 @@ export class GameEngine {
     private ballShadow: THREE.Mesh;
     private resetAt = 0; // timestamp to re-serve after a dead ball (0 = none)
     private aiServeAt = 0; // timestamp for the AI to auto-serve (0 = none)
+    private lastThrowTs = 0; // debounce for physical throws
     private physicsAccumulator = 0;
     /** Which side serves the next point. */
     private servingSide: Side = 'player';
@@ -178,10 +179,71 @@ export class GameEngine {
         this.ai.setDifficulty(d);
     }
 
-    /** The human's swing (pose or keyboard) drives the +X player. */
+    /**
+     * The human's action drives the +X player. A body-tracked event ('pose') is a
+     * PHYSICAL THROW — the ball launches from the hand with a velocity derived from
+     * the real wrist motion. A keyboard event ('manual') keeps the simple J/K/L
+     * targeted stroke so the game is playable without a webcam.
+     */
     private handleSwing(e: SwingEvent): void {
-        this.strike('player', this.player, e);
+        if (e.source === 'pose') this.handleThrow('player', this.player, e);
+        else this.strike('player', this.player, e);
         this.swingCallbacks.forEach((cb) => cb(e));
+    }
+
+    /**
+     * Physical throw: spawn the ball at the player's hand and launch it with a
+     * velocity built from the wrist's release motion — direction from the wrist
+     * travel, speed from the wrist velocity. Reuses TennisPhysics for the flight.
+     */
+    private handleThrow(side: Side, character: PlayerCharacter, e: SwingEvent): void {
+        character.playSwing(SWING_KIND[e.type]);
+        const now = performance.now();
+        if (now - this.lastThrowTs < 250) return; // extra duplicate guard (detector also debounces)
+
+        const ball = this.physics.ball;
+        const sign = side === 'player' ? 1 : -1;
+
+        // Hand/racket world position (ball spawns here).
+        character.root.updateMatrixWorld(true);
+        const hand = character.getRacketWorldPosition();
+
+        const isServe = !ball.inPlay;
+        if (isServe) {
+            if (this.servingSide !== side) return; // only the server may start the point
+        } else {
+            // Rally throw: must hold the ball — it has to be on our half within reach.
+            if (ball.pos.x * sign <= 0) return;
+            const d = Math.hypot(ball.pos.x - hand.x, ball.pos.z - hand.z);
+            if (d > 4.5) return;
+        }
+
+        // Speed from wrist velocity → forward speed toward the opponent.
+        const s = clamp(e.speed, 1.0, 6);
+        const power = clamp((s - 1.0) / 4, 0, 1);
+        const forwardSpeed = 13 + power * 17;            // 13..30 world u/s, faster throw = faster ball
+        const vx = -sign * forwardSpeed;                  // toward the opponent's half
+
+        // Lateral from the wrist's horizontal travel. Physical right (+dirX, de-mirrored)
+        // must map to on-screen right, which is world -Z for the broadcast camera.
+        const vz = clamp(-e.dirX, -5, 5) * 2.4;
+
+        // Vertical: a physics-based net-clearance baseline (depends on throw, not fixed),
+        // plus extra lift from an upward wrist snap (lobs / serve toss).
+        const tNet = Math.min(1.2, Math.max(0.15, Math.abs(hand.x / vx)));
+        const clearance = COURT.NET_HEIGHT + 0.5;
+        let vy = (clearance - hand.y + 0.5 * COURT.GRAVITY * tNet * tNet) / tNet;
+        vy += Math.max(0, -e.dirY) * 2.5;                 // wrist moving up adds arc
+        if (isServe) vy += 3;                             // a serve tosses higher
+        vy = clamp(vy, 3, 24);
+
+        this.lastThrowTs = now;
+        this.physics.launch(
+            { x: hand.x, y: Math.max(hand.y, 0.6), z: hand.z },
+            { x: vx, y: vy, z: vz },
+            side,
+        );
+        this.emitPhysics({ type: 'hit', by: side });
     }
 
     /**
@@ -225,11 +287,11 @@ export class GameEngine {
 
     /** Manually trigger a player-1 swing (keyboard fallback / tests). */
     triggerSwing(type: SwingType, speed = 2.0): void {
-        this.handleSwing({ type, speed, dirX: 0, dirY: 0, hand: 'right', timestamp: performance.now() });
+        this.handleSwing({ type, speed, dirX: 0, dirY: 0, hand: 'right', wristX: 0.5, wristY: 0.5, source: 'manual', timestamp: performance.now() });
     }
 
     private synthSwing(type: SwingType): SwingEvent {
-        return { type, speed: 2.2, dirX: 0, dirY: 0, hand: 'right', timestamp: performance.now() };
+        return { type, speed: 2.2, dirX: 0, dirY: 0, hand: 'right', wristX: 0.5, wristY: 0.5, source: 'manual', timestamp: performance.now() };
     }
 
     private attachKeyboard(): void {

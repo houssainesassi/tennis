@@ -13,11 +13,16 @@ export interface SwingEvent {
     type: SwingType;
     /** Peak wrist speed (normalized units / second). */
     speed: number;
-    /** Normalized swing direction in pose space (+x = player's right, +y = down). */
+    /** Normalized swing/throw velocity in pose space (+x = player's right, +y = down). */
     dirX: number;
     dirY: number;
     /** Which hand produced the swing. */
     hand: 'left' | 'right';
+    /** Normalized wrist position at release (pose space), for spawning the ball. */
+    wristX: number;
+    wristY: number;
+    /** 'pose' = real body-tracked throw; 'manual' = keyboard fallback. */
+    source: 'pose' | 'manual';
     timestamp: number;
 }
 
@@ -143,7 +148,7 @@ export class SwingDetector {
         const raised = wrist.y < shoulder.y - 0.05;
         const verticalDominant = Math.abs(vy) > Math.abs(vx) * 1.1;
         if (raised && verticalDominant) {
-            return { type: 'SERVE', speed, dirX: vx, dirY: vy, hand, timestamp: now };
+            return { type: 'SERVE', speed, dirX: vx, dirY: vy, hand, wristX: wrist.x, wristY: wrist.y, source: 'pose', timestamp: now };
         }
 
         // Ground strokes: classify by horizontal direction for the dominant hand.
@@ -161,7 +166,7 @@ export class SwingDetector {
             // Non-dominant hand leading a stroke reads as a backhand.
             type = 'BACKHAND';
         }
-        return { type, speed, dirX: vx, dirY: vy, hand, timestamp: now };
+        return { type, speed, dirX: vx, dirY: vy, hand, wristX: wrist.x, wristY: wrist.y, source: 'pose', timestamp: now };
     }
 }
 

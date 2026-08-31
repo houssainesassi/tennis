@@ -77,6 +77,19 @@ export class TennisPhysics {
     }
 
     /**
+     * Launch the ball from an explicit position with an explicit velocity — used by
+     * the physical-throw mechanic (velocity derived from real wrist motion). The
+     * existing step() then applies gravity / net / bounce / boundaries. Deterministic.
+     */
+    launch(pos: Vec3, vel: Vec3, by: Side): void {
+        this.ball.pos = { ...pos };
+        this.ball.vel = { ...vel };
+        this.ball.inPlay = true;
+        this.ball.lastHitBy = by;
+        this.ball.bouncesSinceHit = 0;
+    }
+
+    /**
      * Apply a struck ball. Computes a launch velocity that carries the ball to a
      * target in the opponent's court on a net-clearing arc, scaled by swing power.
      * Returns true if the strike connected (ball was reachable), false = whiff.

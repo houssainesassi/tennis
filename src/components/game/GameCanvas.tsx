@@ -41,7 +41,7 @@ export default function GameCanvas() {
                 gameEngine.start();
                 setEngine(gameEngine);
                 // Expose handles for runtime inspection / debugging (dev tooling).
-                (window as any).__game = { engine: gameEngine, app, scene: app.scene };
+                (window as any).__game = { engine: gameEngine, app, scene: app.scene, tracker };
                 return;
             }
             requestAnimationFrame(waitForScene);
